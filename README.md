@@ -44,6 +44,11 @@ Proton Books is a powerful, multi-source ebook search engine and reader. It aggr
 - **Frontend**: HTML5, Tailwind CSS, JavaScript
 - **Reader**: [epub.js](https://github.com/futurepress/epub.js)
 - **APIs**: Gutendex, Open Library Search API, Anna's Archive
+- 
+## AI Disclosure
+
+AI was used in the making of this project to assist with development.
+
 
 ## 📜 License
 MIT
