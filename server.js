@@ -114,37 +114,6 @@ app.get("/api/search", async (req, res) => {
     res.status(502).json({ error: err.message });
   }
 });
-        }
-      }
-      return res.json({ results });
-    }
-
-    const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=30&fields=key,title,author_name,cover_i,first_publish_year,ebook_access,has_fulltext,ia`;
-    const resp = await fetch(url, { signal: AbortSignal.timeout(10000) });
-    if (!resp.ok) throw new Error(`Open Library HTTP ${resp.status}`);
-    const data = await resp.json();
-    if (!data.docs) throw new Error("No results");
-    const books = data.docs.filter(d => d.key).slice(0, 24).map(d => {
-      const iaId = (d.has_fulltext && d.ia && d.ia.length > 0) ? d.ia[0] : null;
-      return {
-        title: d.title || "Unknown",
-        author: d.author_name ? d.author_name.join(", ") : "Unknown",
-        year: d.first_publish_year || "",
-        extension: iaId ? "EPUB" : "",
-        coverId: d.cover_i || null,
-        olid: d.key.replace("/works/", ""),
-        ia: iaId,
-        hasEpub: !!iaId,
-        hasPdf: false,
-        source: "ol"
-      };
-    });
-    res.json({ results: books });
-  } catch (err) {
-    console.error(`[search]`, err.message);
-    res.status(502).json({ error: err.message });
-  }
-});
 
 app.get("/api/book-url", async (req, res) => {
   const ia = (req.query.ia || "").trim();
@@ -155,4 +124,3 @@ app.get("/api/book-url", async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
-
