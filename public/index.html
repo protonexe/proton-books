@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Proton Books</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📖</text></svg>" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" crossorigin="anonymous" />
+  <script src="https://cdn.jsdelivr.net/npm/epubjs@0.3.88/dist/epub.min.js" crossorigin="anonymous"></script>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1><i class="fa-solid fa-book-open"></i> Proton Books</h1>
+    <div style="display:flex;align-items:center;gap:16px">
+      <button id="theme-toggle" title="Toggle Dark Mode" style="background:none;border:none;cursor:pointer;color:#64748b;font-size:18px;padding:4px">
+        <i class="fa-solid fa-moon"></i>
+      </button>
+      <label class="upload-btn" title="Upload .epub file">
+        <i class="fa-solid fa-upload"></i> Upload
+        <input type="file" id="file-upload" accept=".epub" hidden />
+      </label>
+    </div>
+  </header>
+
+  <div class="main">
+    <aside class="panel-left">
+      <div class="search-bar">
+        <input id="search-input" type="text" placeholder="Search by title or author…" />
+        <button id="search-btn">Search</button>
+      </div>
+      <div id="results-area">
+        <div id="placeholder">
+          <i class="fa-solid fa-magnifying-glass icon-lg"></i>
+          <p>Enter a query to search.</p>
+        </div>
+        <div id="results-list"></div>
+      </div>
+       <div id="status"></div>
+       <div class="footer-attr">made with ❤️ by <a href="https://github.com/protonexe" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:underline">proton</a></div>
+     </aside>
+
+    <main class="panel-right">
+      <div id="viewer">
+        <div id="reader-placeholder">
+          <i class="fa-solid fa-book icon-lg"></i>
+          <p>No book open</p>
+          <p class="text-sm mt-1">Click a search result or upload an <code>.epub</code> file.</p>
+        </div>
+        <iframe id="reader-iframe" hidden referrerpolicy="no-referrer"></iframe>
+        <div id="epub-viewport"></div>
+        <div id="iframe-fallback" hidden>
+          <i class="fa-solid fa-triangle-exclamation icon-lg" style="color:#f59e0b"></i>
+          <p>The embedded reader didn't load.</p>
+          <p class="text-sm mt-1">The book may not be embeddable due to archive.org restrictions.</p>
+          <a id="open-external" target="_blank" rel="noopener noreferrer">Open on archive.org →</a>
+        </div>
+      </div>
+      <div id="nav-bar" hidden>
+        <button id="nav-prev"><i class="fa-solid fa-chevron-left"></i> Prev</button>
+        <span id="nav-location"><span id="nav-page">-</span> / <span id="nav-total">-</span></span>
+        <button id="nav-next">Next <i class="fa-solid fa-chevron-right"></i></button>
+      </div>
+    </main>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="/js/app.js"></script>
+</body>
+</html>
