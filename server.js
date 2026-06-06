@@ -8,6 +8,8 @@ const LIBGEN_MIRRORS = [
   "https://libgen.li"
 ];
 
+const metadataCache = new Map();
+
 async function fetchWithMirrors(mirrors, path, options = {}) {
   for (const mirror of mirrors) {
     try {
@@ -19,6 +21,53 @@ async function fetchWithMirrors(mirrors, path, options = {}) {
     }
   }
   return null;
+}
+
+async function enrichMetadata(results, query) {
+  if (!results || results.length === 0) return results;
+  const cacheKey = query.toLowerCase().trim();
+  let meta = metadataCache.get(cacheKey);
+  if (!meta) {
+    try {
+      const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=10`;
+      const resp = await fetch(url, { signal: AbortSignal.timeout(4000) });
+      if (resp.ok) {
+        const data = await resp.json();
+        meta = (data.items || []).map(item => ({
+          title: (item.volumeInfo?.title || "").toLowerCase(),
+          author: (item.volumeInfo?.authors?.[0] || "").toLowerCase(),
+          cover: item.volumeInfo?.imageLinks?.thumbnail || null,
+          description: item.volumeInfo?.description || null,
+          year: item.volumeInfo?.publishedDate?.slice(0, 4) || null
+        })).filter(m => m.title);
+        metadataCache.set(cacheKey, meta);
+        if (metadataCache.size > 100) {
+          const firstKey = metadataCache.keys().next().value;
+          metadataCache.delete(firstKey);
+        }
+      }
+    } catch (err) {
+      console.error(`[metadata] error: ${err.message}`);
+      meta = [];
+    }
+  }
+  if (!meta || meta.length === 0) return results;
+
+  return results.map(r => {
+    if (r.coverUrl && r.source !== "ol") return r;
+    const title = (r.title || "").toLowerCase();
+    const author = (r.author || "").toLowerCase();
+    const match = meta.find(m => title.includes(m.title) || (author && m.author && author.includes(m.author)));
+    if (match) {
+      return {
+        ...r,
+        coverUrl: r.coverUrl || match.cover,
+        description: r.description || match.description,
+        year: r.year || match.year
+      };
+    }
+    return r;
+  });
 }
 
 app.use(express.static("public"));
@@ -151,6 +200,18 @@ const sourceHandlers = {
   }
 };
 
+function deduplicateResults(results) {
+  const seen = new Set();
+  return results.filter(r => {
+    const normalized = (r.title || "").toLowerCase().trim()
+      .replace(/^the\s+/i, "")
+      .replace(/[^\w\s]/gi, "");
+    if (seen.has(normalized)) return false;
+    seen.add(normalized);
+    return true;
+  });
+}
+
 function filterResults(results, filter) {
   if (!filter || filter === "all") return results;
 
@@ -188,6 +249,8 @@ app.get("/api/search", async (req, res) => {
     const allResults = await Promise.all(searchPromises);
     let mergedResults = allResults.flat();
     mergedResults = filterResults(mergedResults, filter);
+    mergedResults = deduplicateResults(mergedResults);
+    mergedResults = await enrichMetadata(mergedResults, query);
     res.json({ results: mergedResults });
   } catch (err) {
     res.status(502).json({ error: err.message });
@@ -206,6 +269,7 @@ app.get("/api/search/:source", async (req, res) => {
   try {
     let results = await handler(query);
     results = filterResults(results, filter);
+    results = await enrichMetadata(results, query);
     res.json({ results });
   } catch (err) {
     res.status(502).json({ error: err.message });
