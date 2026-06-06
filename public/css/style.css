@@ -63,3 +63,5 @@ header h1{font-size:16px;font-weight:600;display:flex;align-items:center;gap:8px
 .footer-attr:hover{opacity:1}
 .skeleton{background:linear-gradient(90deg, var(--bg-panel) 25%, var(--bg-main) 50%, var(--bg-panel) 75%);background-size:200% 100%;animation:skeleton-loading 1.5s infinite;border-radius:4px;color:transparent}
 @keyframes skeleton-loading{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.zen-mode .panel-left, .zen-mode header { display: none !important; }
+.zen-mode .panel-right { width: 100% !important; max-width: 100% !important; }

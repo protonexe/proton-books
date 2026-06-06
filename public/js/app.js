@@ -1,12 +1,12 @@
 (function () {
   var searchInput = document.getElementById("search-input");
+  var searchFilter = document.getElementById("search-filter");
   var clearSearch = document.getElementById("clear-search");
   var searchBtn = document.getElementById("search-btn");
   var themeToggle = document.getElementById("theme-toggle");
   var resultsList = document.getElementById("results-list");
   var recentList = document.getElementById("recent-list");
   var recentArea = document.getElementById("recent-books");
-  var placeholder = document.getElementById("placeholder");
   var placeholder = document.getElementById("placeholder");
   var statusEl = document.getElementById("status");
   var readerPlaceholder = document.getElementById("reader-placeholder");
@@ -21,13 +21,104 @@
   var navTotal = document.getElementById("nav-total");
   var fileUpload = document.getElementById("file-upload");
   var toastEl = document.getElementById("toast");
+  var readerSettings = document.getElementById("reader-settings");
+  var readerTts = document.getElementById("reader-tts");
+  var zenModeBtn = document.getElementById("zen-mode");
+  var settingsOverlay = document.getElementById("settings-overlay");
+  var closeSettings = document.getElementById("close-settings");
+  var fontInc = document.getElementById("font-inc");
+  var fontDec = document.getElementById("font-dec");
+  var fontSizeVal = document.getElementById("font-size-val");
+  var fontFamily = document.getElementById("font-family");
+  var lineSpacing = document.getElementById("line-spacing");
 
-  var book = null;
+  var currentFontSize = 100;
+  var isTtsPlaying = false;
+  
+  function applyReaderTheme() {
+    if (!rendition) return;
+    var family = fontFamily.value;
+    var spacing = lineSpacing.value;
+    var size = currentFontSize + "%";
+    
+    rendition.themes.register("custom", {
+      "body": {
+        "font-family": family,
+        "font-size": size,
+        "line-height": spacing
+      }
+    });
+    rendition.themes.select("custom");
+  }
+
+  readerSettings.addEventListener("click", function () {
+    settingsOverlay.style.display = "flex";
+  });
+
+  closeSettings.addEventListener("click", function () {
+    settingsOverlay.style.display = "none";
+  });
+
+  fontInc.addEventListener("click", function () {
+    currentFontSize += 10;
+    fontSizeVal.textContent = currentFontSize + "%";
+    applyReaderTheme();
+  });
+
+  fontDec.addEventListener("click", function () {
+    if (currentFontSize > 50) {
+      currentFontSize -= 10;
+      fontSizeVal.textContent = currentFontSize + "%";
+      applyReaderTheme();
+    }
+  });
+
+  fontFamily.addEventListener("change", applyReaderTheme);
+  lineSpacing.addEventListener("change", applyReaderTheme);
+
+  zenModeBtn.addEventListener("click", function () {
+    document.body.classList.toggle("zen-mode");
+    zenModeBtn.innerHTML = document.body.classList.contains("zen-mode") ? 
+      '<i class="fa-solid fa-compress"></i>' : '<i class="fa-solid fa-expand"></i>';
+  });
+
+  readerTts.addEventListener("click", function () {
+    if (isTtsPlaying) {
+      window.speechSynthesis.cancel();
+      isTtsPlaying = false;
+      readerTts.innerHTML = '<i class="fa-solid fa-volume-high"></i>';
+    } else {
+      if (!book) { toast("No book open", true); return; }
+      
+      // Basic TTS: Read current page text
+      var text = "";
+      if (rendition) {
+        // epubjs doesn't make it easy to get the current page text directly, 
+        // but we can try to find the current element in the viewport
+        var viewport = document.getElementById("epub-viewport");
+        text = viewport.innerText || viewport.textContent;
+      }
+      
+      if (!text) { toast("No text found to read.", true); return; }
+      
+      var utterance = new SpeechSynthesisUtterance(text);
+      utterance.onend = function () {
+        isTtsPlaying = false;
+        readerTts.innerHTML = '<i class="fa-solid fa-volume-high"></i>';
+      };
+      window.speechSynthesis.speak(utterance);
+      isTtsPlaying = true;
+      readerTts.innerHTML = '<i class="fa-solid fa-volume-xmark"></i>';
+    }
+  });
   var rendition = null;
   var searching = false;
   var iframeLoadTimer = null;
   var currentIaUrl = "";
   var recentBooks = JSON.parse(localStorage.getItem("recentBooks") || "[]");
+  var favoriteBooks = JSON.parse(localStorage.getItem("favoriteBooks") || "[]");
+  var favoritesArea = document.getElementById("favorites-area");
+  var favoritesList = document.getElementById("favorites-list");
   
   function saveRecent(book) {
     recentBooks = recentBooks.filter(b => b.olid !== book.olid);
@@ -37,7 +128,50 @@
     renderRecentBooks();
   }
 
+  function toggleFavorite(book, event) {
+    if (event) event.stopPropagation();
+    var index = favoriteBooks.findIndex(b => b.olid === book.olid);
+    if (index > -1) {
+      favoriteBooks.splice(index, 1);
+    } else {
+      favoriteBooks.unshift(book);
+    }
+    localStorage.setItem("favoriteBooks", JSON.stringify(favoriteBooks));
+    renderFavorites();
+    // If this book is currently in the results list, update its star icon
+    updateFavoriteIcons();
+  }
+
+  function renderFavorites() {
+    if (favoriteBooks.length === 0) {
+      favoritesArea.hidden = true;
+      return;
+    }
+    favoritesArea.hidden = false;
+    favoritesList.innerHTML = "";
+    favoriteBooks.forEach(function (r) {
+      var el = document.createElement("div");
+      el.className = "result";
+      el.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center">' +
+                     '<div class="title">' + esc(r.title) + '</div>' +
+                     '<button class="fav-btn" style="background:none;border:none;cursor:pointer;color:var(--text);padding:0 4px"><i class="fa-solid fa-star" style="color:#f59e0b"></i></button>' +
+                     '</div>';
+      el.addEventListener("click", function () { openBook(r); });
+      el.querySelector(".fav-btn").addEventListener("click", function (e) { toggleFavorite(r, e); });
+      favoritesList.appendChild(el);
+    });
+  }
+
+  function updateFavoriteIcons() {
+    var results = document.querySelectorAll(".result");
+    results.forEach(function(el) {
+      // This is tricky because we don't have the book object. 
+      // We might need to store the olid in a data attribute.
+    });
+  }
+
   function renderRecentBooks() {
+
     if (recentBooks.length === 0) {
       recentArea.hidden = true;
       return;
@@ -65,6 +199,7 @@
     themeToggle.innerHTML = '<i class="fa-solid fa-sun"></i>';
   }
   renderRecentBooks();
+  renderFavorites();
 
   function toast(msg, isError) {
     toastEl.textContent = msg;
@@ -114,7 +249,9 @@
 
     async function fetchSource(source) {
       try {
-        var resp = await fetch(source.url + "?q=" + encodeURIComponent(q));
+        var filter = searchFilter.value;
+        var url = source.url + "?q=" + encodeURIComponent(q) + "&filter=" + encodeURIComponent(filter);
+        var resp = await fetch(url);
         var data = await resp.json();
         if (!resp.ok) throw new Error();
         
@@ -231,13 +368,27 @@
       var buffer = await resp.arrayBuffer();
       book = ePub(buffer);
       rendition = book.renderTo(epubViewport, { width: "100%", height: "100%", spread: "none", flow: "paginated" });
-      await rendition.display();
+      
+      // Restore progress
+      var savedCfi = localStorage.getItem("progress_" + (url.split("/md5/")[1] || url));
+      if (savedCfi) {
+        await rendition.display(savedCfi);
+      } else {
+        await rendition.display();
+      }
+
       navBar.hidden = false;
       if (book.spine) navTotal.textContent = book.spine.length || "-";
       rendition.on("relocated", function () {
         if (rendition.location && rendition.location.start && rendition.location.start.displayed) {
           navPage.textContent = rendition.location.start.displayed.page || "-";
           if (rendition.location.start.displayed.total) navTotal.textContent = rendition.location.start.displayed.total;
+          
+          // Save progress
+          var cfi = rendition.location.start.cfi;
+          if (cfi) {
+            localStorage.setItem("progress_" + (url.split("/md5/")[1] || url), cfi);
+          }
         }
       });
       toast("Loaded: " + title);
@@ -287,6 +438,10 @@
   navPrev.addEventListener("click", function () { if (rendition) rendition.prev(); });
   navNext.addEventListener("click", function () { if (rendition) rendition.next(); });
   document.addEventListener("keydown", function (e) {
+    if (e.key === "t" || e.key === "T") {
+      if (document.activeElement.tagName === "INPUT" || document.activeElement.tagName === "SELECT") return;
+      themeToggle.click();
+    }
     if (!rendition) return;
     if (e.key === "ArrowLeft") { e.preventDefault(); rendition.prev(); }
     if (e.key === "ArrowRight") { e.preventDefault(); rendition.next(); }
