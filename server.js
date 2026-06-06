@@ -17,6 +17,12 @@ const LIBGEN_MIRRORS = [
   "https://libgen.st"
 ];
 
+const SCIHUB_MIRRORS = [
+  "https://sci-hub.st",
+  "https://sci-hub.se",
+  "https://sci-hub.ru"
+];
+
 async function fetchWithMirrors(mirrors, path, options = {}) {
   for (const mirror of mirrors) {
     try {
@@ -154,6 +160,36 @@ const sourceHandlers = {
       }
     }
     return results;
+  },
+  scihub: async (query) => {
+    // Sci-Hub: try each mirror with a simple GET to the search page
+    const path = `/${encodeURIComponent(query)}`;
+    const result = await fetchWithMirrors(SCIHUB_MIRRORS, path, {
+      headers: { "User-Agent": "Mozilla/5.0" }
+    });
+    if (!result) return [];
+
+    const html = await result.resp.text();
+    const results = [];
+
+    // Sci-Hub typically shows a PDF embed with a "download" button
+    const pdfMatch = html.match(/(https?:\/\/[^"'\s]+\.pdf)/i);
+    if (pdfMatch) {
+      results.push({
+        title: query,
+        author: "Unknown",
+        year: "",
+        extension: "PDF",
+        coverId: null,
+        coverUrl: null,
+        olid: query,
+        ia: pdfMatch[1],
+        hasEpub: false,
+        hasPdf: true,
+        source: "scihub"
+      });
+    }
+    return results;
   }
 };
 
@@ -177,6 +213,49 @@ function filterResults(results, filter) {
   });
 }
 
+const metadataCache = new Map();
+
+async function enrichMetadata(results, query) {
+  if (!results || results.length === 0) return results;
+  const cacheKey = query.toLowerCase().trim();
+  let meta = metadataCache.get(cacheKey);
+  if (!meta) {
+    try {
+      const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=5`;
+      const resp = await fetch(url, { signal: AbortSignal.timeout(4000) });
+      if (resp.ok) {
+        const data = await resp.json();
+        meta = (data.items || []).map((item) => ({
+          title: (item.volumeInfo?.title || "").toLowerCase(),
+          author: (item.volumeInfo?.authors?.[0] || "").toLowerCase(),
+          cover: item.volumeInfo?.imageLinks?.thumbnail || null,
+          description: item.volumeInfo?.description || null,
+          year: item.volumeInfo?.publishedDate?.slice(0, 4) || null
+        })).filter((m) => m.title);
+        metadataCache.set(cacheKey, meta);
+        if (metadataCache.size > 50) {
+          const firstKey = metadataCache.keys().next().value;
+          metadataCache.delete(firstKey);
+        }
+      }
+    } catch (_) {
+      meta = [];
+    }
+  }
+  if (!meta || meta.length === 0) return results;
+
+  return results.map((r) => {
+    if (r.coverUrl) return r;
+    const t = (r.title || "").toLowerCase();
+    const a = (r.author || "").toLowerCase();
+    const match = meta.find((m) => m.title === t || (m.author && m.author === a && t.includes(m.title.split(":")[0])));
+    if (match) {
+      return { ...r, coverUrl: match.cover || r.coverUrl, description: match.description || r.description, year: r.year || match.year };
+    }
+    return r;
+  });
+}
+
 app.get("/api/search", async (req, res) => {
   const query = (req.query.q || "").trim();
   const filter = req.query.filter || "all";
@@ -194,6 +273,7 @@ app.get("/api/search", async (req, res) => {
     const allResults = await Promise.all(searchPromises);
     let mergedResults = allResults.flat();
     mergedResults = filterResults(mergedResults, filter);
+    mergedResults = await enrichMetadata(mergedResults, query);
     res.json({ results: mergedResults });
   } catch (err) {
     res.status(502).json({ error: err.message });
@@ -212,6 +292,7 @@ app.get("/api/search/:source", async (req, res) => {
   try {
     let results = await handler(query);
     results = filterResults(results, filter);
+    results = await enrichMetadata(results, query);
     res.json({ results });
   } catch (err) {
     res.status(502).json({ error: err.message });
@@ -224,6 +305,7 @@ app.get("/api/book-url", async (req, res) => {
   res.json({ downloadUrl: `https://archive.org/download/${ia}/${ia}.epub` });
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`Network access: http://<your-local-ip>:${PORT}`);
 });

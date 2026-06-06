@@ -1,0 +1,2 @@
+Server running on http://localhost:3000
+Network access: http://<your-local-ip>:3000
