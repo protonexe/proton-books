@@ -87,29 +87,46 @@
       window.speechSynthesis.cancel();
       isTtsPlaying = false;
       readerTts.innerHTML = '<i class="fa-solid fa-volume-high"></i>';
-    } else {
-      if (!book) { toast("No book open", true); return; }
-      
-      // Basic TTS: Read current page text
-      var text = "";
-      if (rendition) {
-        // epubjs doesn't make it easy to get the current page text directly, 
-        // but we can try to find the current element in the viewport
-        var viewport = document.getElementById("epub-viewport");
-        text = viewport.innerText || viewport.textContent;
-      }
-      
-      if (!text) { toast("No text found to read.", true); return; }
-      
-      var utterance = new SpeechSynthesisUtterance(text);
-      utterance.onend = function () {
-        isTtsPlaying = false;
-        readerTts.innerHTML = '<i class="fa-solid fa-volume-high"></i>';
-      };
-      window.speechSynthesis.speak(utterance);
-      isTtsPlaying = true;
-      readerTts.innerHTML = '<i class="fa-solid fa-volume-xmark"></i>';
+      return;
     }
+    if (!rendition) { toast("No book open", true); return; }
+
+    var text = "";
+    try {
+      var contents = rendition.getContents();
+      contents.forEach(function (c) {
+        try {
+          var doc = c.document;
+          if (doc && doc.body) {
+            text += (doc.body.innerText || doc.body.textContent || "") + " ";
+          }
+        } catch (_) {}
+      });
+    } catch (e) {
+      console.error("TTS contents error:", e);
+    }
+
+    if (!text || !text.trim()) {
+      toast("No text found to read.", true);
+      return;
+    }
+
+    text = text.replace(/\s+/g, " ").trim();
+    if (text.length > 5000) text = text.slice(0, 5000);
+
+    var utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1.0;
+    utterance.onend = function () {
+      isTtsPlaying = false;
+      readerTts.innerHTML = '<i class="fa-solid fa-volume-high"></i>';
+    };
+    utterance.onerror = function () {
+      isTtsPlaying = false;
+      readerTts.innerHTML = '<i class="fa-solid fa-volume-high"></i>';
+    };
+    window.speechSynthesis.speak(utterance);
+    isTtsPlaying = true;
+    readerTts.innerHTML = '<i class="fa-solid fa-volume-xmark"></i>';
   });
   var rendition = null;
   var searching = false;
@@ -241,7 +258,7 @@
     var sources = [
       { id: "gutenberg", url: "/api/search/gutenberg" },
       { id: "ol", url: "/api/search/ol" },
-      { id: "annas", url: "/api/search/annas" }
+      { id: "libgen", url: "/api/search/libgen" }
     ];
 
     var totalResults = 0;
@@ -353,11 +370,6 @@
       loadEpubFromUrl(r.ia, r.title);
     } else if (r.extension === "PDF") {
       readerIframe.src = r.ia; 
-      armIframeWatchdog();
-    } else if (r.source === "annas") {
-      currentIaUrl = r.ia;
-      openExternal.href = currentIaUrl;
-      readerIframe.src = r.ia;
       armIframeWatchdog();
     }
   }

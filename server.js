@@ -3,31 +3,16 @@ import fetch from "node-fetch";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const ANNAS_MIRRORS = [
-  "https://annas-archive.org",
-  "https://annas-archive.gl",
-  "https://annas-archive.pk",
-  "https://annas-archive.gd"
-];
 
 const LIBGEN_MIRRORS = [
-  "https://libgen.li",
-  "https://libgen.rs",
-  "https://libgen.is",
-  "https://libgen.st"
-];
-
-const SCIHUB_MIRRORS = [
-  "https://sci-hub.st",
-  "https://sci-hub.se",
-  "https://sci-hub.ru"
+  "https://libgen.li"
 ];
 
 async function fetchWithMirrors(mirrors, path, options = {}) {
   for (const mirror of mirrors) {
     try {
       const url = `${mirror}${path}`;
-      const resp = await fetch(url, { ...options, signal: AbortSignal.timeout(5000) });
+      const resp = await fetch(url, { ...options, signal: AbortSignal.timeout(8000) });
       if (resp.ok) return { resp, mirror };
     } catch (err) {
       console.error(`Mirror ${mirror} failed: ${err.message}`);
@@ -35,7 +20,6 @@ async function fetchWithMirrors(mirrors, path, options = {}) {
   }
   return null;
 }
-
 
 app.use(express.static("public"));
 
@@ -53,28 +37,9 @@ app.get("/api/download-proxy", async (req, res) => {
 });
 
 const sourceHandlers = {
-  gutenberg: async (query) => {
-    const url = `https://gutendex.com/books?search=${encodeURIComponent(query)}`;
-    const resp = await fetch(url);
-    if (!resp.ok) return [];
-    const data = await resp.json();
-    return (data.results || []).slice(0, 20).map(d => ({
-      title: d.title || "Unknown",
-      author: d.authors?.[0]?.name || "Unknown",
-      year: "",
-      extension: "EPUB",
-      coverId: null,
-      coverUrl: d.formats?.["image/jpeg"],
-      olid: d.id.toString(),
-      ia: d.formats?.["application/epub+zip"],
-      hasEpub: !!d.formats?.["application/epub+zip"],
-      hasPdf: false,
-      source: "gutenberg"
-    }));
-  },
   ol: async (query) => {
-    const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=30&fields=key,title,author_name,cover_i,first_publish_year,ebook_access,has_fulltext,ia`;
-    const resp = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=20&fields=key,title,author_name,cover_i,first_publish_year,ebook_access,has_fulltext,ia`;
+    const resp = await fetch(url, { signal: AbortSignal.timeout(8000) });
     if (!resp.ok) return [];
     const data = await resp.json();
     if (!data.docs) return [];
@@ -94,102 +59,95 @@ const sourceHandlers = {
       };
     });
   },
-  annas: async (query) => {
-    const path = `/search?q=${encodeURIComponent(query)}`;
-    const result = await fetchWithMirrors(ANNAS_MIRRORS, path, { headers: { "User-Agent": "Mozilla/5.0" } });
-    if (!result) return [];
-    
-    const html = await result.resp.text();
-    const results = [];
-    const resultRegex = /<div class="result">([\s\S]*?)<\/div>/g;
-    let match;
-    while ((match = resultRegex.exec(html)) !== null && results.length < 20) {
-      const content = match[1];
-      const md5Match = content.match(/href="\/md5\/([a-f0-9]{32})"/);
-      const titleMatch = content.match(/<div class="title">([\s\S]*?)<\/div>/);
-      const authorMatch = content.match(/<div class="author">([\s\S]*?)<\/div>/);
-      const extMatch = content.match(/<span class="extension">([\s\S]*?)<\/span>/);
-      if (md5Match && titleMatch) {
-        const md5 = md5Match[1];
-        results.push({
-          title: titleMatch[1].trim(),
-          author: authorMatch ? authorMatch[1].trim() : "Unknown",
-          year: "",
-          extension: extMatch ? extMatch[1].trim().toUpperCase() : "EPUB",
-          coverId: null,
-          coverUrl: null,
-          olid: md5,
-          ia: `${result.mirror}/md5/${md5}`,
-          hasEpub: true,
-          hasPdf: false,
-          source: "annas"
-        });
-      }
-    }
-    return results;
-  },
+
   libgen: async (query) => {
-    const path = `/search.php?req=${encodeURIComponent(query)}`;
+    const path = `/index.php?req=${encodeURIComponent(query)}&curtab=f`;
     const result = await fetchWithMirrors(LIBGEN_MIRRORS, path, { headers: { "User-Agent": "Mozilla/5.0" } });
     if (!result) return [];
 
     const html = await result.resp.text();
     const results = [];
-    // LibGen results are usually in a table with <tr> tags
-    const rowRegex = /<tr class="[^"]*">([\s\S]*?)<\/tr>/g;
+
+    const tbodyMatch = html.match(/<tbody>([\s\S]*?)<\/tbody>/);
+    if (!tbodyMatch) return [];
+    const tbody = tbodyMatch[1];
+
+    const rowRegex = /<tr>([\s\S]*?)<\/tr>/g;
     let match;
-    while ((match = rowRegex.exec(html)) !== null && results.length < 20) {
+    while ((match = rowRegex.exec(tbody)) !== null && results.length < 20) {
       const row = match[1];
-      const titleMatch = row.match(/<a href="\/g?id=([0-9]+)">([\s\S]*?)<\/a>/);
-      const authorMatch = row.match(/<td[^>]*>([\s\S]*?)<\/td>/); // Simplistic, might need refinement
-      if (titleMatch) {
-        const id = titleMatch[1];
+
+      const idMatch = row.match(/\/file\.php\?id=(\d+)/);
+      const md5Match = row.match(/md5=([a-f0-9]{32})/);
+      const allTds = [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)];
+
+      if (idMatch && allTds.length >= 5 && allTds[0]) {
+        const id = idMatch[1];
+        const md5 = md5Match ? md5Match[1] : null;
+        const firstTdHtml = allTds[0][1];
+        const title = firstTdHtml
+          .replace(/<br\s*\/?>/gi, " ")
+          .replace(/<[^>]*>/g, "")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 200);
+
+        const authorTd = allTds[1] ? allTds[1][1].replace(/<[^>]*>/g, "").trim() : "Unknown";
+        const yearTd = allTds[3] ? allTds[3][1].match(/(\d{4})/) : null;
+        const year = yearTd ? yearTd[1] : "";
+
+        let ext = "PDF";
+        for (const td of allTds) {
+          const text = td[1].replace(/<[^>]*>/g, "").trim().toLowerCase();
+          if (["epub","pdf","mobi","azw3","fb2","djvu","cbr","cbz","doc","rtf","lit","odt","html","txt"].includes(text)) {
+            ext = text.toUpperCase();
+            break;
+          }
+        }
+
         results.push({
-          title: titleMatch[2].trim(),
-          author: "Unknown",
-          year: "",
-          extension: "PDF",
+          title: title,
+          author: authorTd || "Unknown",
+          year: year,
+          extension: ext,
           coverId: null,
           coverUrl: null,
           olid: id,
-          ia: `${result.mirror}/get?id=${id}`,
-          hasEpub: false,
-          hasPdf: true,
+          ia: md5 ? `${result.mirror}/get.php?md5=${md5}` : `${result.mirror}/file.php?id=${id}`,
+          hasEpub: ext === "EPUB" || ext === "MOBI" || ext === "AZW3",
+          hasPdf: ext === "PDF",
           source: "libgen"
         });
       }
     }
     return results;
   },
-  scihub: async (query) => {
-    // Sci-Hub: try each mirror with a simple GET to the search page
-    const path = `/${encodeURIComponent(query)}`;
-    const result = await fetchWithMirrors(SCIHUB_MIRRORS, path, {
-      headers: { "User-Agent": "Mozilla/5.0" }
-    });
-    if (!result) return [];
 
-    const html = await result.resp.text();
-    const results = [];
-
-    // Sci-Hub typically shows a PDF embed with a "download" button
-    const pdfMatch = html.match(/(https?:\/\/[^"'\s]+\.pdf)/i);
-    if (pdfMatch) {
-      results.push({
-        title: query,
-        author: "Unknown",
-        year: "",
-        extension: "PDF",
-        coverId: null,
-        coverUrl: null,
-        olid: query,
-        ia: pdfMatch[1],
-        hasEpub: false,
-        hasPdf: true,
-        source: "scihub"
+  gutenberg: async (query) => {
+    const url = `https://archive.org/advancedsearch.php?q=${encodeURIComponent(`mediatype:(texts) AND collection:gutenberg AND (${query})`)}&fl[]=identifier&fl[]=title&fl[]=creator&fl[]=date&fl[]=imagecount&rows=20&output=json`;
+    try {
+      const resp = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      if (!resp.ok) return [];
+      const data = await resp.json();
+      return (data.response?.docs || []).map(d => {
+        const id = d.identifier;
+        return {
+          title: d.title || "Unknown",
+          author: d.creator || "Unknown",
+          year: d.date || "",
+          extension: "EPUB",
+          coverId: null,
+          coverUrl: `https://archive.org/services/img/${id}`,
+          olid: id,
+          ia: id,
+          hasEpub: true,
+          hasPdf: false,
+          source: "gutenberg"
+        };
       });
+    } catch (_) {
+      return [];
     }
-    return results;
   }
 };
 
@@ -202,7 +160,7 @@ function filterResults(results, filter) {
       case "books":
         return ext === "EPUB" || r.source === "gutenberg" || r.source === "ol";
       case "papers":
-        return r.source === "libgen" || (r.source === "annas" && (ext === "PDF" || r.title.toLowerCase().includes("abstract")));
+        return ext === "PDF" && r.source === "libgen";
       case "comics":
         return ext === "CBR" || ext === "CBZ" || r.title.toLowerCase().includes("comic");
       case "magazines":
@@ -210,49 +168,6 @@ function filterResults(results, filter) {
       default:
         return true;
     }
-  });
-}
-
-const metadataCache = new Map();
-
-async function enrichMetadata(results, query) {
-  if (!results || results.length === 0) return results;
-  const cacheKey = query.toLowerCase().trim();
-  let meta = metadataCache.get(cacheKey);
-  if (!meta) {
-    try {
-      const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=5`;
-      const resp = await fetch(url, { signal: AbortSignal.timeout(4000) });
-      if (resp.ok) {
-        const data = await resp.json();
-        meta = (data.items || []).map((item) => ({
-          title: (item.volumeInfo?.title || "").toLowerCase(),
-          author: (item.volumeInfo?.authors?.[0] || "").toLowerCase(),
-          cover: item.volumeInfo?.imageLinks?.thumbnail || null,
-          description: item.volumeInfo?.description || null,
-          year: item.volumeInfo?.publishedDate?.slice(0, 4) || null
-        })).filter((m) => m.title);
-        metadataCache.set(cacheKey, meta);
-        if (metadataCache.size > 50) {
-          const firstKey = metadataCache.keys().next().value;
-          metadataCache.delete(firstKey);
-        }
-      }
-    } catch (_) {
-      meta = [];
-    }
-  }
-  if (!meta || meta.length === 0) return results;
-
-  return results.map((r) => {
-    if (r.coverUrl) return r;
-    const t = (r.title || "").toLowerCase();
-    const a = (r.author || "").toLowerCase();
-    const match = meta.find((m) => m.title === t || (m.author && m.author === a && t.includes(m.title.split(":")[0])));
-    if (match) {
-      return { ...r, coverUrl: match.cover || r.coverUrl, description: match.description || r.description, year: r.year || match.year };
-    }
-    return r;
   });
 }
 
@@ -273,7 +188,6 @@ app.get("/api/search", async (req, res) => {
     const allResults = await Promise.all(searchPromises);
     let mergedResults = allResults.flat();
     mergedResults = filterResults(mergedResults, filter);
-    mergedResults = await enrichMetadata(mergedResults, query);
     res.json({ results: mergedResults });
   } catch (err) {
     res.status(502).json({ error: err.message });
@@ -292,7 +206,6 @@ app.get("/api/search/:source", async (req, res) => {
   try {
     let results = await handler(query);
     results = filterResults(results, filter);
-    results = await enrichMetadata(results, query);
     res.json({ results });
   } catch (err) {
     res.status(502).json({ error: err.message });
