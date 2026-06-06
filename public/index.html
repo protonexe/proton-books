@@ -37,13 +37,17 @@
         </div>
         <button id="search-btn">Search</button>
       </div>
-      <div id="results-area">
-        <div id="placeholder">
-          <i class="fa-solid fa-magnifying-glass icon-lg"></i>
-          <p>Enter a query to search.</p>
+        <div id="results-area">
+          <div id="recent-books" style="margin-bottom:16px;display:none">
+            <div style="font-size:11px;font-weight:600;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.05em">Recent</div>
+            <div id="recent-list" style="display:flex;flex-direction:column;gap:4px"></div>
+          </div>
+          <div id="placeholder">
+            <i class="fa-solid fa-magnifying-glass icon-lg"></i>
+            <p>Enter a query to search.</p>
+          </div>
+          <div id="results-list"></div>
         </div>
-        <div id="results-list"></div>
-      </div>
        <div id="status"></div>
        <div class="footer-attr">Made with ❤️ by <a href="https://github.com/protonexe" target="_blank" rel="noopener noreferrer">Proton</a></div>
      </aside>
@@ -59,9 +63,9 @@
         <div id="epub-viewport"></div>
         <div id="iframe-fallback" hidden>
           <i class="fa-solid fa-triangle-exclamation icon-lg" style="color:#f59e0b"></i>
-          <p>The embedded reader didn't load.</p>
-          <p class="text-sm mt-1">The book may not be embeddable due to archive.org restrictions.</p>
-          <a id="open-external" target="_blank" rel="noopener noreferrer">Open on archive.org →</a>
+          <p>Limited Preview</p>
+          <p class="text-sm mt-1">This book requires a free account to view all pages.</p>
+          <a id="open-external" target="_blank" rel="noopener noreferrer">Borrow on Archive.org →</a>
         </div>
       </div>
       <div id="nav-bar" hidden>

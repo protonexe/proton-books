@@ -4,6 +4,9 @@
   var searchBtn = document.getElementById("search-btn");
   var themeToggle = document.getElementById("theme-toggle");
   var resultsList = document.getElementById("results-list");
+  var recentList = document.getElementById("recent-list");
+  var recentArea = document.getElementById("recent-books");
+  var placeholder = document.getElementById("placeholder");
   var placeholder = document.getElementById("placeholder");
   var statusEl = document.getElementById("status");
   var readerPlaceholder = document.getElementById("reader-placeholder");
@@ -24,6 +27,31 @@
   var searching = false;
   var iframeLoadTimer = null;
   var currentIaUrl = "";
+  var recentBooks = JSON.parse(localStorage.getItem("recentBooks") || "[]");
+  
+  function saveRecent(book) {
+    recentBooks = recentBooks.filter(b => b.olid !== book.olid);
+    recentBooks.unshift(book);
+    recentBooks = recentBooks.slice(0, 5);
+    localStorage.setItem("recentBooks", JSON.stringify(recentBooks));
+    renderRecentBooks();
+  }
+
+  function renderRecentBooks() {
+    if (recentBooks.length === 0) {
+      recentArea.hidden = true;
+      return;
+    }
+    recentArea.hidden = false;
+    recentList.innerHTML = "";
+    recentBooks.forEach(function (r) {
+      var el = document.createElement("div");
+      el.className = "result";
+      el.innerHTML = '<div class="title">' + esc(r.title) + '</div>';
+      el.addEventListener("click", function () { openBook(r); });
+      recentList.appendChild(el);
+    });
+  }
 
   themeToggle.addEventListener("click", function () {
     document.body.classList.toggle("dark");
@@ -36,6 +64,7 @@
     document.body.classList.add("dark");
     themeToggle.innerHTML = '<i class="fa-solid fa-sun"></i>';
   }
+  renderRecentBooks();
 
   function toast(msg, isError) {
     toastEl.textContent = msg;
@@ -167,6 +196,7 @@
   function openBook(r) {
     if (!r.hasEpub && r.extension !== "PDF") { toast("No viewable format available.", true); return; }
     toast("Opening: " + r.title + "…");
+    saveRecent(r);
     closeBook();
     readerPlaceholder.hidden = true;
     epubViewport.hidden = true;
@@ -183,7 +213,6 @@
       epubViewport.hidden = false;
       loadEpubFromUrl(r.ia, r.title);
     } else if (r.extension === "PDF") {
-      // For PDFs, use the native iframe viewer
       readerIframe.src = r.ia; 
       armIframeWatchdog();
     } else if (r.source === "annas") {
@@ -192,6 +221,7 @@
       readerIframe.src = r.ia;
       armIframeWatchdog();
     }
+  }
   }
 
   async function loadEpubFromUrl(url, title) {
