@@ -1,5 +1,6 @@
 (function () {
   var searchInput = document.getElementById("search-input");
+  var clearSearch = document.getElementById("clear-search");
   var searchBtn = document.getElementById("search-btn");
   var themeToggle = document.getElementById("theme-toggle");
   var resultsList = document.getElementById("results-list");
@@ -42,6 +43,16 @@
     setTimeout(function () { toastEl.classList.remove("show"); }, 4000);
   }
 
+  searchInput.addEventListener("input", function() {
+    clearSearch.hidden = searchInput.value.trim() === "";
+  });
+
+  clearSearch.addEventListener("click", function() {
+    searchInput.value = "";
+    clearSearch.hidden = true;
+    searchInput.focus();
+  });
+
   async function search() {
     var q = searchInput.value.trim();
     if (!q) { toast("Enter a query.", true); return; }
@@ -51,6 +62,16 @@
     searchBtn.textContent = "Searching…";
     statusEl.textContent = "";
     statusEl.className = "";
+    
+    // Add skeleton loaders
+    resultsList.innerHTML = "";
+    for(var i=0; i<5; i++) {
+      var sk = document.createElement("div");
+      sk.className = "result skeleton";
+      sk.style.height = "60px";
+      resultsList.appendChild(sk);
+    }
+
     try {
       var resp = await fetch("/api/search?q=" + encodeURIComponent(q));
       var data = await resp.json();
@@ -103,7 +124,7 @@
   function esc(s) { if (!s) return ""; var d = document.createElement("div"); d.textContent = String(s); return d.innerHTML; }
 
   function openBook(r) {
-    if (!r.hasEpub) { toast("No free download available.", true); return; }
+    if (!r.hasEpub && r.extension !== "PDF") { toast("No viewable format available.", true); return; }
     toast("Opening: " + r.title + "…");
     closeBook();
     readerPlaceholder.hidden = true;
@@ -116,10 +137,14 @@
       openExternal.href = currentIaUrl;
       readerIframe.src = "https://archive.org/embed/" + encodeURIComponent(r.ia);
       armIframeWatchdog();
-    } else if (r.source === "gutenberg") {
+    } else if (r.source === "gutenberg" || r.extension === "EPUB") {
       readerIframe.hidden = true;
       epubViewport.hidden = false;
       loadEpubFromUrl(r.ia, r.title);
+    } else if (r.extension === "PDF") {
+      // For PDFs, use the native iframe viewer
+      readerIframe.src = r.ia; 
+      armIframeWatchdog();
     } else if (r.source === "annas") {
       currentIaUrl = r.ia;
       openExternal.href = currentIaUrl;
@@ -200,36 +225,61 @@
   fileUpload.addEventListener("change", async function (e) {
     var file = e.target.files[0];
     if (!file) return;
-    if (!file.name.toLowerCase().endsWith(".epub")) { toast("Select an .epub file.", true); return; }
+    var ext = file.name.split('.').pop().toLowerCase();
+    if (ext !== "epub" && ext !== "pdf" && ext !== "txt") { toast("Select an .epub, .pdf, or .txt file.", true); return; }
     toast("Opening: " + file.name + "…");
     closeBook();
     readerPlaceholder.hidden = true;
-    epubViewport.hidden = false;
-    try {
-      var buffer = await file.arrayBuffer();
-      book = ePub(buffer);
-      rendition = book.renderTo(epubViewport, { 
-        width: "100%", 
-        height: "100%", 
-        spread: "none", 
-        flow: "paginated",
-        manager: "default"
-      });
-      await rendition.display();
-      navBar.hidden = false;
-      if (book.spine) navTotal.textContent = book.spine.length || "-";
-      rendition.on("relocated", function () {
-        if (rendition.location && rendition.location.start && rendition.location.start.displayed) {
-          navPage.textContent = rendition.location.start.displayed.page || "-";
-          if (rendition.location.start.displayed.total) navTotal.textContent = rendition.location.start.displayed.total;
-        }
-      });
-      toast("Loaded: " + file.name);
-    } catch (err) {
-      console.error("EPUB Load Error:", err);
-      readerPlaceholder.hidden = false;
+    
+    if (ext === "pdf") {
       epubViewport.hidden = true;
-      toast("Error: " + err.message, true);
+      readerIframe.hidden = false;
+      var blobUrl = URL.createObjectURL(file);
+      readerIframe.src = blobUrl;
+    } else if (ext === "txt") {
+      epubViewport.hidden = true;
+      readerIframe.hidden = true;
+      var text = await file.text();
+      var textDiv = document.createElement("div");
+      textDiv.style.padding = "40px";
+      textDiv.style.whiteSpace = "pre-wrap";
+      textDiv.style.fontSize = "14px";
+      textDiv.style.lineHeight = "1.6";
+      textDiv.style.overflowY = "auto";
+      textDiv.style.height = "100%";
+      textDiv.textContent = text;
+      epubViewport.innerHTML = "";
+      epubViewport.appendChild(textDiv);
+      epubViewport.hidden = false;
+    } else {
+      epubViewport.hidden = false;
+      readerIframe.hidden = true;
+      try {
+        var buffer = await file.arrayBuffer();
+        book = ePub(buffer);
+        rendition = book.renderTo(epubViewport, { 
+          width: "100%", 
+          height: "100%", 
+          spread: "none", 
+          flow: "paginated",
+          manager: "default"
+        });
+        await rendition.display();
+        navBar.hidden = false;
+        if (book.spine) navTotal.textContent = book.spine.length || "-";
+        rendition.on("relocated", function () {
+          if (rendition.location && rendition.location.start && rendition.location.start.displayed) {
+            navPage.textContent = rendition.location.start.displayed.page || "-";
+            if (rendition.location.start.displayed.total) navTotal.textContent = rendition.location.start.displayed.total;
+          }
+        });
+        toast("Loaded: " + file.name);
+      } catch (err) {
+        console.error("EPUB Load Error:", err);
+        readerPlaceholder.hidden = false;
+        epubViewport.hidden = true;
+        toast("Error: " + err.message, true);
+      }
     }
     fileUpload.value = "";
   });
@@ -237,30 +287,60 @@
   document.addEventListener("dragover", function (e) { e.preventDefault(); });
   document.addEventListener("drop", async function (e) {
     e.preventDefault();
-    var files = Array.from(e.dataTransfer.files).filter(function (f) { return f.name.endsWith(".epub"); });
-    if (files.length === 0) { toast("Drop an .epub file.", true); return; }
-    toast("Opening: " + files[0].name + "…");
+    var files = Array.from(e.dataTransfer.files).filter(function (f) { 
+      var ext = f.name.split('.').pop().toLowerCase();
+      return ext === "epub" || ext === "pdf" || ext === "txt"; 
+    });
+    if (files.length === 0) { toast("Drop an .epub, .pdf, or .txt file.", true); return; }
+    
+    var file = files[0];
+    toast("Opening: " + file.name + "…");
     closeBook();
     readerPlaceholder.hidden = true;
-    epubViewport.hidden = false;
-    try {
-      var buffer = await files[0].arrayBuffer();
-      book = ePub(buffer);
-      rendition = book.renderTo(epubViewport, { width: "100%", height: "100%", spread: "none", flow: "paginated" });
-      await rendition.display();
-      navBar.hidden = false;
-      if (book.spine) navTotal.textContent = book.spine.length || "-";
-      rendition.on("relocated", function () {
-        if (rendition.location && rendition.location.start && rendition.location.start.displayed) {
-          navPage.textContent = rendition.location.start.displayed.page || "-";
-          if (rendition.location.start.displayed.total) navTotal.textContent = rendition.location.start.displayed.total;
-        }
-      });
-      toast("Loaded: " + files[0].name);
-    } catch (err) {
-      readerPlaceholder.hidden = false;
+    
+    var ext = file.name.split('.').pop().toLowerCase();
+    if (ext === "pdf") {
       epubViewport.hidden = true;
-      toast("Error: " + err.message, true);
+      readerIframe.hidden = false;
+      var blobUrl = URL.createObjectURL(file);
+      readerIframe.src = blobUrl;
+    } else if (ext === "txt") {
+      epubViewport.hidden = true;
+      readerIframe.hidden = true;
+      var text = await file.text();
+      var textDiv = document.createElement("div");
+      textDiv.style.padding = "40px";
+      textDiv.style.whiteSpace = "pre-wrap";
+      textDiv.style.fontSize = "14px";
+      textDiv.style.lineHeight = "1.6";
+      textDiv.style.overflowY = "auto";
+      textDiv.style.height = "100%";
+      textDiv.textContent = text;
+      epubViewport.innerHTML = "";
+      epubViewport.appendChild(textDiv);
+      epubViewport.hidden = false;
+    } else {
+      epubViewport.hidden = false;
+      readerIframe.hidden = true;
+      try {
+        var buffer = await file.arrayBuffer();
+        book = ePub(buffer);
+        rendition = book.renderTo(epubViewport, { width: "100%", height: "100%", spread: "none", flow: "paginated" });
+        await rendition.display();
+        navBar.hidden = false;
+        if (book.spine) navTotal.textContent = book.spine.length || "-";
+        rendition.on("relocated", function () {
+          if (rendition.location && rendition.location.start && rendition.location.start.displayed) {
+            navPage.textContent = rendition.location.start.displayed.page || "-";
+            if (rendition.location.start.displayed.total) navTotal.textContent = rendition.location.start.displayed.total;
+          }
+        });
+        toast("Loaded: " + file.name);
+      } catch (err) {
+        readerPlaceholder.hidden = false;
+        epubViewport.hidden = true;
+        toast("Error: " + err.message, true);
+      }
     }
   });
 

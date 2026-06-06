@@ -7,6 +7,7 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📖</text></svg>" />
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" crossorigin="anonymous" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/epubjs@0.3.88/dist/epub.min.js" crossorigin="anonymous"></script>
   <link rel="stylesheet" href="/css/style.css" />
 </head>
@@ -18,9 +19,9 @@
       <button id="theme-toggle" title="Toggle Dark Mode" style="background:none;border:none;cursor:pointer;color:#64748b;font-size:18px;padding:4px">
         <i class="fa-solid fa-moon"></i>
       </button>
-      <label class="upload-btn" title="Upload .epub file">
+      <label class="upload-btn" title="Upload ebook or document">
         <i class="fa-solid fa-upload"></i> Upload
-        <input type="file" id="file-upload" accept=".epub" hidden />
+        <input type="file" id="file-upload" accept=".epub,.pdf,.txt" hidden />
       </label>
     </div>
   </header>
@@ -28,7 +29,12 @@
   <div class="main">
     <aside class="panel-left">
       <div class="search-bar">
-        <input id="search-input" type="text" placeholder="Search by title or author…" />
+        <div class="search-input-group">
+          <input id="search-input" type="text" placeholder="Search by title or author…" />
+          <button id="clear-search" title="Clear search" hidden>
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
         <button id="search-btn">Search</button>
       </div>
       <div id="results-area">
@@ -47,7 +53,7 @@
         <div id="reader-placeholder">
           <i class="fa-solid fa-book icon-lg"></i>
           <p>No book open</p>
-          <p class="text-sm mt-1">Click a search result or upload an <code>.epub</code> file.</p>
+          <p class="text-sm mt-1">Click a search result or upload an <code>.epub</code>, <code>.pdf</code>, or <code>.txt</code> file.</p>
         </div>
         <iframe id="reader-iframe" hidden referrerpolicy="no-referrer"></iframe>
         <div id="epub-viewport"></div>

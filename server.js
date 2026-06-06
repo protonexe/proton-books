@@ -28,9 +28,9 @@ app.get("/api/search", async (req, res) => {
     { id: "gutenberg", fetch: async () => {
         const url = `https://gutendex.com/books?search=${encodeURIComponent(query)}`;
         const resp = await fetch(url);
-        if (!resp.ok) return null;
+        if (!resp.ok) return [];
         const data = await resp.json();
-        return (data.results || []).slice(0, 24).map(d => ({
+        return (data.results || []).slice(0, 20).map(d => ({
           title: d.title || "Unknown",
           author: d.authors?.[0]?.name || "Unknown",
           year: "",
@@ -46,11 +46,11 @@ app.get("/api/search", async (req, res) => {
     }},
     { id: "ol", fetch: async () => {
         const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=30&fields=key,title,author_name,cover_i,first_publish_year,ebook_access,has_fulltext,ia`;
-        const resp = await fetch(url, { signal: AbortSignal.timeout(10000) });
-        if (!resp.ok) return null;
+        const resp = await fetch(url, { signal: AbortSignal.timeout(5000) });
+        if (!resp.ok) return [];
         const data = await resp.json();
-        if (!data.docs) return null;
-        return data.docs.filter(d => d.key).slice(0, 24).map(d => {
+        if (!data.docs) return [];
+        return data.docs.filter(d => d.key).slice(0, 20).map(d => {
           const iaId = (d.has_fulltext && d.ia && d.ia.length > 0) ? d.ia[0] : null;
           return {
             title: d.title || "Unknown",
@@ -68,13 +68,13 @@ app.get("/api/search", async (req, res) => {
     }},
     { id: "annas", fetch: async () => {
         const url = `${ANNAS_MIRROR}/search?q=${encodeURIComponent(query)}`;
-        const resp = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
-        if (!resp.ok) return null;
+        const resp = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(5000) });
+        if (!resp.ok) return [];
         const html = await resp.text();
         const results = [];
         const resultRegex = /<div class="result">([\s\S]*?)<\/div>/g;
         let match;
-        while ((match = resultRegex.exec(html)) !== null && results.length < 24) {
+        while ((match = resultRegex.exec(html)) !== null && results.length < 20) {
           const content = match[1];
           const md5Match = content.match(/href="\/md5\/([a-f0-9]{32})"/);
           const titleMatch = content.match(/<div class="title">([\s\S]*?)<\/div>/);
@@ -97,18 +97,16 @@ app.get("/api/search", async (req, res) => {
             });
           }
         }
-        return results.length > 0 ? results : null;
+        return results;
     }}
   ];
 
   try {
-    for (const source of sources) {
-      const results = await source.fetch();
-      if (results && results.length > 0) {
-        return res.json({ results });
-      }
-    }
-    res.json({ results: [] });
+    const searchPromises = sources.map(s => s.fetch().catch(() => []));
+    const allResults = await Promise.all(searchPromises);
+    const mergedResults = allResults.flat();
+    
+    res.json({ results: mergedResults });
   } catch (err) {
     console.error(`[search]`, err.message);
     res.status(502).json({ error: err.message });
