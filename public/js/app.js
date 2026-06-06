@@ -222,7 +222,6 @@
       armIframeWatchdog();
     }
   }
-  }
 
   async function loadEpubFromUrl(url, title) {
     try {
