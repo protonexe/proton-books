@@ -60,40 +60,81 @@
     searching = true;
     searchBtn.disabled = true;
     searchBtn.textContent = "Searching…";
-    statusEl.textContent = "";
+    statusEl.textContent = "Searching sources...";
     statusEl.className = "";
     
-    // Add skeleton loaders
     resultsList.innerHTML = "";
-    for(var i=0; i<5; i++) {
+    placeholder.hidden = true;
+    
+    // Add skeletons
+    for(var i=0; i<6; i++) {
       var sk = document.createElement("div");
       sk.className = "result skeleton";
       sk.style.height = "60px";
       resultsList.appendChild(sk);
     }
 
-    try {
-      var resp = await fetch("/api/search?q=" + encodeURIComponent(q));
-      var data = await resp.json();
-      if (!resp.ok) throw new Error(data.error || "HTTP " + resp.status);
-      renderResults(data.results || []);
-      statusEl.textContent = (data.results || []).length + " results";
-    } catch (err) {
-      statusEl.textContent = err.message;
-      statusEl.className = "error";
+    var sources = [
+      { id: "gutenberg", url: "/api/search/gutenberg" },
+      { id: "ol", url: "/api/search/ol" },
+      { id: "annas", url: "/api/search/annas" }
+    ];
+
+    var totalResults = 0;
+    var failedSources = 0;
+
+    async function fetchSource(source) {
+      try {
+        var resp = await fetch(source.url + "?q=" + encodeURIComponent(q));
+        var data = await resp.json();
+        if (!resp.ok) throw new Error();
+        
+        var results = data.results || [];
+        totalResults += results.length;
+        
+        // Clear skeletons on the very first successful result
+        if (totalResults > 0 && resultsList.querySelector(".skeleton")) {
+          resultsList.innerHTML = "";
+        }
+        
+        renderResults(results, true);
+        statusEl.textContent = totalResults + " results found";
+      } catch (err) {
+        failedSources++;
+      }
+    }
+
+    var allResolved = [];
+    var promises = sources.map(async (s) => {
+      await fetchSource(s);
+      allResolved.push(s.id);
+    });
+
+    await Promise.all(promises);
+    
+    if (totalResults === 0) {
       resultsList.innerHTML = "";
       placeholder.hidden = false;
-      toast(err.message, true);
-    } finally {
-      searching = false;
-      searchBtn.disabled = false;
-      searchBtn.textContent = "Search";
+      if (failedSources === sources.length) {
+        statusEl.textContent = "Search failed. Please try again.";
+        statusEl.className = "error";
+      } else {
+        statusEl.textContent = "No results found.";
+      }
+    } else {
+      statusEl.textContent = totalResults + " results found";
     }
+
+    searching = false;
+    searchBtn.disabled = false;
+    searchBtn.textContent = "Search";
   }
 
-  function renderResults(results) {
-    resultsList.innerHTML = "";
-    placeholder.hidden = results.length > 0;
+  function renderResults(results, append) {
+    if (!append) {
+      resultsList.innerHTML = "";
+    }
+    placeholder.hidden = results.length > 0 || !append;
     if (results.length === 0) return;
     var frag = document.createDocumentFragment();
     results.forEach(function (r) {
