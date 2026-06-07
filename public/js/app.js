@@ -419,13 +419,13 @@
             '<div class="author">' + esc(r.author) + '</div>' +
             (descSnippet ? '<div style="font-size:11px;color:var(--text-muted);margin-top:4px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">' + esc(descSnippet) + '</div>' : '') +
             '<div class="meta">' +
-              (r.year ? '<span>'+r.year+'</span>' : '') +
-              (r.extension ? '<span style="font-family:monospace;font-weight:600;color:#4f46e5">'+esc(r.extension)+'</span>' : '') +
-              (sourceName ? '<span style="color:#64748b;font-style:italic">'+esc(sourceName)+'</span>' : '') +
-              (!r.hasEpub && r.source !== "ol" ? '<span style="color:#dc2626;font-size:10px">No free download</span>' : '') +
-            '</div>' +
-          '</div>' +
-        '</div>';
+               (r.year ? '<span>'+r.year+'</span>' : '') +
+               (r.extension ? '<span style="font-family:monospace;font-weight:600;color:#4f46e5">'+esc(r.extension)+'</span>' : '') +
+               (sourceName ? '<span style="color:#64748b;font-style:italic">'+esc(sourceName)+'</span>' : '') +
+               (!r.hasEpub && !r.hasPdf && r.source !== "ol" ? '<span style="color:#dc2626;font-size:10px">No free download</span>' : '') +
+             '</div>' +
+           '</div>' +
+         '</div>';
       el.addEventListener("click", function () { openBook(r); });
       frag.appendChild(el);
     });
@@ -459,7 +459,7 @@
       epubViewport.hidden = false;
       loadEpubFromUrl(r.ia, r.title);
     } else if (r.extension === "PDF") {
-      readerIframe.src = r.ia; 
+      readerIframe.src = "/api/download-proxy?url=" + encodeURIComponent(r.ia);
       armIframeWatchdog();
     }
   }
