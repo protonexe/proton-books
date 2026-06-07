@@ -465,6 +465,9 @@
   }
 
   async function loadEpubFromUrl(url, title) {
+    if (url && !url.startsWith("http")) {
+      url = "https://archive.org/download/" + url + "/" + url + ".epub";
+    }
     try {
       var proxyUrl = "/api/download-proxy?url=" + encodeURIComponent(url);
       var resp = await fetch(proxyUrl);
