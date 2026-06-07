@@ -65,3 +65,31 @@ header h1{font-size:16px;font-weight:600;display:flex;align-items:center;gap:8px
 @keyframes skeleton-loading{0%{background-position:200% 0}100%{background-position:-200% 0}}
 .zen-mode .panel-left, .zen-mode header { display: none !important; }
 .zen-mode .panel-right { width: 100% !important; max-width: 100% !important; }
+
+/* Source status chips */
+.source-chip {
+  transition: opacity 0.12s ease, transform 0.12s ease;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--bg-panel);
+  color: var(--text-main);
+  font-size: 12px;
+}
+.source-chip i { display: inline-block; width: 12px; }
+
+.toc-item {
+  padding: 8px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s;
+  border: 1px solid transparent;
+  color: var(--text-main);
+  text-decoration: none;
+  display: block;
+}
+.toc-item:hover {
+  background: var(--bg-panel);
+  border-color: var(--border);
+  padding-left: 16px;
+}

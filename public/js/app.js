@@ -26,6 +26,10 @@
   var zenModeBtn = document.getElementById("zen-mode");
   var settingsOverlay = document.getElementById("settings-overlay");
   var closeSettings = document.getElementById("close-settings");
+  var tocOverlay = document.getElementById("toc-overlay");
+  var closeToc = document.getElementById("close-toc");
+  var tocList = document.getElementById("toc-list");
+  var readerTocBtn = document.getElementById("reader-toc");
   var fontInc = document.getElementById("font-inc");
   var fontDec = document.getElementById("font-dec");
   var fontSizeVal = document.getElementById("font-size-val");
@@ -58,6 +62,36 @@
   closeSettings.addEventListener("click", function () {
     settingsOverlay.style.display = "none";
   });
+  
+  closeToc.addEventListener("click", function () {
+    tocOverlay.style.display = "none";
+  });
+
+  readerTocBtn.addEventListener("click", function () {
+    if (!book) { toast("No book open", true); return; }
+    renderTOC();
+    tocOverlay.style.display = "flex";
+  });
+
+  function renderTOC() {
+    tocList.innerHTML = "";
+    var nav = book.navigation;
+    if (!nav || nav.length === 0) {
+      tocList.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:20px">No Table of Contents available.</div>';
+      return;
+    }
+    nav.forEach(function (item) {
+      var el = document.createElement("div");
+      el.className = "toc-item";
+      el.textContent = item.label;
+      el.addEventListener("click", function () {
+        rendition.display(item.href);
+        tocOverlay.style.display = "none";
+        toast("Navigating to: " + item.label);
+      });
+      tocList.appendChild(el);
+    });
+  }
 
   fontInc.addEventListener("click", function () {
     currentFontSize += 10;
@@ -261,29 +295,80 @@
       { id: "libgen", url: "/api/search/libgen" }
     ];
 
+    // Render source status chips above results
+    function renderSourceChips(sources) {
+      var container = document.getElementById('sources-status');
+      if (!container) return;
+      container.innerHTML = '';
+      sources.forEach(function(s) {
+        var chip = document.createElement('div');
+        chip.className = 'source-chip';
+        chip.setAttribute('data-source', s.id);
+        chip.style.padding = '6px 10px';
+        chip.style.borderRadius = '999px';
+        chip.style.background = 'var(--bg-secondary)';
+        chip.style.color = 'var(--text)';
+        chip.style.fontSize = '12px';
+        chip.style.display = 'inline-flex';
+        chip.style.alignItems = 'center';
+        chip.style.gap = '8px';
+        chip.textContent = s.id;
+        container.appendChild(chip);
+      });
+    }
+
+    function updateSourceChip(id, status, count) {
+      var container = document.getElementById('sources-status');
+      if (!container) return;
+      var chip = container.querySelector('[data-source="' + id + '"]');
+      if (!chip) return;
+      switch (status) {
+        case 'loading':
+          chip.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="width:12px"></i> ' + id + '…';
+          chip.style.opacity = '0.9';
+          break;
+        case 'ok':
+          chip.innerHTML = '<i class="fa-solid fa-check-circle" style="color:#16a34a;width:12px"></i> ' + id + (count ? ' (' + count + ')' : '');
+          chip.style.opacity = '1';
+          break;
+        case 'fail':
+          chip.innerHTML = '<i class="fa-solid fa-circle-exclamation" style="color:#dc2626;width:12px"></i> ' + id + ' (failed)';
+          chip.style.opacity = '0.6';
+          break;
+        default:
+          chip.textContent = id;
+      }
+    }
+
     var totalResults = 0;
     var failedSources = 0;
 
+    // Prepare UI chips
+    renderSourceChips(sources);
+
     async function fetchSource(source) {
+      updateSourceChip(source.id, 'loading');
       try {
         var filter = searchFilter.value;
         var url = source.url + "?q=" + encodeURIComponent(q) + "&filter=" + encodeURIComponent(filter);
         var resp = await fetch(url);
         var data = await resp.json();
         if (!resp.ok) throw new Error();
-        
+
         var results = data.results || [];
         totalResults += results.length;
-        
+
         // Clear skeletons on the very first successful result
         if (totalResults > 0 && resultsList.querySelector(".skeleton")) {
           resultsList.innerHTML = "";
         }
-        
+
         renderResults(results, true);
         statusEl.textContent = totalResults + " results found";
+        updateSourceChip(source.id, 'ok', results.length);
       } catch (err) {
         failedSources++;
+        updateSourceChip(source.id, 'fail');
       }
     }
 
