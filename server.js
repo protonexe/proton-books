@@ -92,97 +92,125 @@ app.get("/api/download-proxy", async (req, res) => {
 const sourceHandlers = {
   ol: async (query) => {
     const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=20&fields=key,title,author_name,cover_i,first_publish_year,ebook_access,has_fulltext,ia`;
-    const resp = await fetch(url, { signal: AbortSignal.timeout(8000) });
-    if (!resp.ok) return [];
-    const data = await resp.json();
-    if (!data.docs) return [];
-    return data.docs.filter(d => d.key).slice(0, 20).map(d => {
-      const iaId = (d.has_fulltext && d.ia && d.ia.length > 0) ? d.ia[0] : null;
-      return {
-        title: d.title || "Unknown",
-        author: d.author_name ? d.author_name.join(", ") : "Unknown",
-        year: d.first_publish_year || "",
-        extension: iaId ? "EPUB" : "",
-        coverId: d.cover_i || null,
-        olid: d.key.replace("/works/", ""),
-        ia: iaId,
-        hasEpub: !!iaId,
-        hasPdf: false,
-        source: "ol"
-      };
-    });
+    console.log(`[ol] Searching: ${url}`);
+    try {
+      const resp = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      console.log(`[ol] Response status: ${resp.status}`);
+      if (!resp.ok) {
+        console.error(`[ol] HTTP error: ${resp.status} ${resp.statusText}`);
+        return [];
+      }
+      const data = await resp.json();
+      if (!data.docs) {
+        console.warn(`[ol] No docs found in response`);
+        return [];
+      }
+      const results = data.docs.filter(d => d.key).slice(0, 20).map(d => {
+        const iaId = (d.has_fulltext && d.ia && d.ia.length > 0) ? d.ia[0] : null;
+        return {
+          title: d.title || "Unknown",
+          author: d.author_name ? d.author_name.join(", "),
+          year: d.first_publish_year || "",
+          extension: iaId ? "EPUB" : "",
+          coverId: d.cover_i || null,
+          olid: d.key.replace("/works/", ""),
+          ia: iaId,
+          hasEpub: !!iaId,
+          hasPdf: false,
+          source: "ol"
+        };
+      });
+      console.log(`[ol] Found ${results.length} results`);
+      return results;
+    } catch (err) {
+      console.error(`[ol] Critical error: ${err.message}`);
+      return [];
+    }
   },
 
   libgen: async (query) => {
     const path = `/index.php?req=${encodeURIComponent(query)}&curtab=f`;
+    console.log(`[libgen] Searching path: ${path}`);
     const result = await fetchWithMirrors(LIBGEN_MIRRORS, path, { headers: { "User-Agent": "Mozilla/5.0" } });
-    if (!result) return [];
-
-    const html = await result.resp.text();
-    const results = [];
-
-    const tbodyMatch = html.match(/<tbody>([\s\S]*?)<\/tbody>/);
-    if (!tbodyMatch) return [];
-    const tbody = tbodyMatch[1];
-
-    const rowRegex = /<tr>([\s\S]*?)<\/tr>/g;
-    let match;
-    while ((match = rowRegex.exec(tbody)) !== null && results.length < 20) {
-      const row = match[1];
-
-      const idMatch = row.match(/\/file\.php\?id=(\d+)/);
-      const md5Match = row.match(/md5=([a-f0-9]{32})/);
-      const allTds = [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)];
-
-      if (idMatch && allTds.length >= 5 && allTds[0]) {
-        const id = idMatch[1];
-        const md5 = md5Match ? md5Match[1] : null;
-        const firstTdHtml = allTds[0][1];
-        const title = firstTdHtml
-          .replace(/<br\s*\/?>/gi, " ")
-          .replace(/<[^>]*>/g, "")
-          .replace(/\s+/g, " ")
-          .trim()
-          .slice(0, 200);
-
-        const authorTd = allTds[1] ? allTds[1][1].replace(/<[^>]*>/g, "").trim() : "Unknown";
-        const yearTd = allTds[3] ? allTds[3][1].match(/(\d{4})/) : null;
-        const year = yearTd ? yearTd[1] : "";
-
-        let ext = "PDF";
-        for (const td of allTds) {
-          const text = td[1].replace(/<[^>]*>/g, "").trim().toLowerCase();
-          if (["epub","pdf","mobi","azw3","fb2","djvu","cbr","cbz","doc","rtf","lit","odt","html","txt"].includes(text)) {
-            ext = text.toUpperCase();
-            break;
-          }
-        }
-
-        results.push({
-          title: title,
-          author: authorTd || "Unknown",
-          year: year,
-          extension: ext,
-          coverId: null,
-          coverUrl: null,
-          olid: id,
-          ia: md5 ? `${result.mirror}/get.php?md5=${md5}` : `${result.mirror}/file.php?id=${id}`,
-          hasEpub: ext === "EPUB" || ext === "MOBI" || ext === "AZW3",
-          hasPdf: ext === "PDF",
-          source: "libgen"
-        });
-      }
+    if (!result) {
+      console.error(`[libgen] All mirrors failed for path: ${path}`);
+      return [];
     }
-    return results;
+    console.log(`[libgen] Mirror ${result.mirror} succeeded with status ${result.resp.status}`);
+    try {
+      const html = await result.resp.text();
+      const results = [];
+      const tbodyMatch = html.match(/<tbody>([\s\S]*?)<\/tbody>/);
+      if (!tbodyMatch) {
+        console.warn(`[libgen] No <tbody> found in HTML response`);
+        return [];
+      }
+      const tbody = tbodyMatch[1];
+      const rowRegex = /<tr>([\s\S]*?)<\/tr>/g;
+      let match;
+      while ((match = rowRegex.exec(tbody)) !== null && results.length < 20) {
+        const row = match[1];
+        const idMatch = row.match(/\/file\.php\?id=(\d+)/);
+        const md5Match = row.match(/md5=([a-f0-9]{32})/);
+        const allTds = [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)];
+        if (idMatch && allTds.length >= 5 && allTds[0]) {
+          const id = idMatch[1];
+          const md5 = md5Match ? md5Match[1] : null;
+          const firstTdHtml = allTds[0][1];
+          const title = firstTdHtml
+            .replace(/<br\s*\/?>/gi, " ")
+            .replace(/<[^>]*>/g, "")
+            .replace(/\s+/g, " ")
+            .trim()
+            .slice(0, 200);
+          const authorTd = allTds[1] ? allTds[1][1].replace(/<[^>]*>/g, "").trim() : "Unknown";
+          const yearTd = allTds[3] ? allTds[3][1].match(/(\d{4})/) : null;
+          const year = yearTd ? yearTd[1] : "";
+          let ext = "PDF";
+          for (const td of allTds) {
+            const text = td[1].replace(/<[^>]*>/g, "").trim().toLowerCase();
+            if (["epub","pdf","mobi","azw3","fb2","djvu","cbr","cbz","doc","rtf","lit","odt","html","txt"].includes(text)) {
+              ext = text.toUpperCase();
+              break;
+            }
+          }
+          results.push({
+            title: title,
+            author: authorTd || "Unknown",
+            year: year,
+            extension: ext,
+            coverId: null,
+            coverUrl: null,
+            olid: id,
+            ia: md5 ? `${result.mirror}/get.php?md5=${md5}` : `${result.mirror}/file.php?id=${id}`,
+            hasEpub: ext === "EPUB" || ext === "MOBI" || ext === "AZW3",
+            hasPdf: ext === "PDF",
+            source: "libgen"
+          });
+        }
+      }
+      console.log(`[libgen] Found ${results.length} results`);
+      return results;
+    } catch (err) {
+      console.error(`[libgen] Parsing error: ${err.message}`);
+      return [];
+    }
   },
 
   gutenberg: async (query) => {
     const url = `https://archive.org/advancedsearch.php?q=${encodeURIComponent(`mediatype:(texts) AND collection:gutenberg AND (${query})`)}&fl[]=identifier&fl[]=title&fl[]=creator&fl[]=date&fl[]=imagecount&rows=20&output=json`;
+    console.log(`[gutenberg] Searching: ${url}`);
     try {
       const resp = await fetch(url, { signal: AbortSignal.timeout(8000) });
-      if (!resp.ok) return [];
+      console.log(`[gutenberg] Response status: ${resp.status}`);
+      if (!resp.ok) {
+        console.error(`[gutenberg] HTTP error: ${resp.status} ${resp.statusText}`);
+        return [];
+      }
       const data = await resp.json();
-      return (data.response?.docs || []).map(d => {
+      const docs = data.response?.docs || [];
+      console.log(`[gutenberg] Found ${docs.length} docs in response`);
+      return docs.map(d => {
         const id = d.identifier;
         return {
           title: d.title || "Unknown",
@@ -198,10 +226,11 @@ const sourceHandlers = {
           source: "gutenberg"
         };
       });
-    } catch (_) {
+    } catch (err) {
+      console.error(`[gutenberg] Critical error: ${err.message}`);
       return [];
     }
-  }
+  },
 };
 
 function deduplicateResults(results) {
