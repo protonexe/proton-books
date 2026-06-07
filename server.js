@@ -79,12 +79,17 @@ app.get("/api/download-proxy", async (req, res) => {
     const response = await fetch(url, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-      }
+      },
+      redirect: 'follow'
     });
-    if (!response.ok) throw new Error(`Proxy error: ${response.status}`);
+    if (!response.ok) {
+      console.error(`[proxy] Fetch failed for ${url} with status ${response.status}`);
+      throw new Error(`Proxy error: ${response.status}`);
+    }
     res.setHeader("Content-Type", response.headers.get("content-type") || "application/octet-stream");
     response.body.pipe(res);
   } catch (err) {
+    console.error(`[proxy] Critical error for ${url}: ${err.message}`);
     res.status(502).json({ error: err.message });
   }
 });
@@ -109,7 +114,7 @@ const sourceHandlers = {
         const iaId = (d.has_fulltext && d.ia && d.ia.length > 0) ? d.ia[0] : null;
         return {
           title: d.title || "Unknown",
-          author: d.author_name ? d.author_name.join(", "),
+          author: d.author_name ? d.author_name.join(", ") : "Unknown",
           year: d.first_publish_year || "",
           extension: iaId ? "EPUB" : "",
           coverId: d.cover_i || null,
