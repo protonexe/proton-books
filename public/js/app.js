@@ -449,7 +449,12 @@
       openExternal.href = currentIaUrl;
       readerIframe.src = "https://archive.org/embed/" + encodeURIComponent(r.ia);
       armIframeWatchdog();
-    } else if (r.source === "gutenberg" || r.extension === "EPUB") {
+    } else if (r.source === "gutenberg") {
+      var gutUrl = "https://archive.org/download/" + r.ia + "/" + r.ia + ".epub";
+      readerIframe.hidden = true;
+      epubViewport.hidden = false;
+      loadEpubFromUrl(gutUrl, r.title);
+    } else if (r.extension === "EPUB") {
       readerIframe.hidden = true;
       epubViewport.hidden = false;
       loadEpubFromUrl(r.ia, r.title);
