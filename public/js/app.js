@@ -610,7 +610,17 @@
       console.error("EPUB Load Error:", err);
       epubViewport.hidden = true;
       readerPlaceholder.hidden = true;
-      showIframeFallback("Unable to load book via proxy. Please use the external link.");
+      
+      var fallbackUrl = url;
+      if (url.includes("/download/")) {
+        fallbackUrl = url.replace("/download/", "/details/");
+        if (fallbackUrl.endsWith(".epub")) {
+          fallbackUrl = fallbackUrl.replace(".epub", "");
+        }
+      }
+      
+      openExternal.href = fallbackUrl;
+      showIframeFallback("The book file could not be loaded. Please try viewing it on Archive.org.");
       toast("Error: " + err.message, true);
     }
     }
