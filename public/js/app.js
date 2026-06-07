@@ -603,12 +603,13 @@
           }
         });
         toast("Loaded: " + file.name);
-      } catch (err) {
-        console.error("EPUB Load Error:", err);
-        readerPlaceholder.hidden = false;
-        epubViewport.hidden = true;
-        toast("Error: " + err.message, true);
-      }
+    } catch (err) {
+      console.error("EPUB Load Error:", err);
+      epubViewport.hidden = true;
+      readerPlaceholder.hidden = true;
+      showIframeFallback("Unable to load book via proxy. Please use the external link.");
+      toast("Error: " + err.message, true);
+    }
     }
     fileUpload.value = "";
   });

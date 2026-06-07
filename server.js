@@ -76,7 +76,11 @@ app.get("/api/download-proxy", async (req, res) => {
   const url = req.query.url;
   if (!url) return res.status(400).json({ error: "Missing ?url=" });
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      }
+    });
     if (!response.ok) throw new Error(`Proxy error: ${response.status}`);
     res.setHeader("Content-Type", response.headers.get("content-type") || "application/octet-stream");
     response.body.pipe(res);
