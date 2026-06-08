@@ -7,6 +7,7 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📖</text></svg>" />
   <link rel="manifest" href="/manifest.json" />
   <meta name="theme-color" content="#000000" />
+  <meta name="description" content="Proton Books — multi-source ebook search engine and reader" />
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" crossorigin="anonymous" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -17,10 +18,25 @@
 <div id="app">
   <header>
     <h1><i class="fa-solid fa-book-open"></i> Proton Books</h1>
-    <div style="display:flex;align-items:center;gap:16px">
-      <button id="theme-toggle" title="Toggle Dark Mode" style="background:none;border:none;cursor:pointer;color:#64748b;font-size:18px;padding:4px">
+    <div style="display:flex;align-items:center;gap:12px">
+      <button id="shortcuts-btn" title="Keyboard Shortcuts (?)" class="header-icon-btn">
+        <i class="fa-solid fa-keyboard"></i>
+      </button>
+      <button id="health-btn" title="Source Health" class="header-icon-btn">
+        <i class="fa-solid fa-heart-pulse"></i>
+      </button>
+      <button id="theme-toggle" title="Toggle Dark Mode (T)" class="header-icon-btn">
         <i class="fa-solid fa-moon"></i>
       </button>
+      <div style="display:flex;gap:4px">
+        <button id="export-btn" title="Export Data" class="header-icon-btn">
+          <i class="fa-solid fa-download"></i>
+        </button>
+        <button id="import-btn" title="Import Data" class="header-icon-btn">
+          <i class="fa-solid fa-upload"></i>
+        </button>
+        <input type="file" id="import-file" accept=".json" hidden />
+      </div>
       <label class="upload-btn" title="Upload ebook or document">
         <i class="fa-solid fa-upload"></i> Upload
         <input type="file" id="file-upload" accept=".epub,.pdf,.txt" hidden />
@@ -32,39 +48,92 @@
     <aside class="panel-left">
       <div class="search-bar">
           <div class="search-input-group">
-            <input id="search-input" type="text" placeholder="Search by title or author…" />
-            <select id="search-filter" style="background:var(--bg-secondary);color:var(--text);border:none;border-radius:4px;padding:0 8px;font-size:12px;cursor:pointer;outline:none">
+            <input id="search-input" type="text" placeholder="Search by title or author…" autocomplete="off" aria-label="Search books" />
+            <select id="search-filter" aria-label="Filter results">
               <option value="all">All</option>
               <option value="books">Books</option>
               <option value="papers">Papers</option>
               <option value="comics">Comics</option>
               <option value="magazines">Magazines</option>
             </select>
-            <button id="clear-search" title="Clear search" hidden>
+            <button id="clear-search" title="Clear search" hidden aria-label="Clear search">
               <i class="fa-solid fa-xmark"></i>
             </button>
           </div>
-
-        <button id="search-btn">Search</button>
+          <button id="search-btn" aria-label="Search">Search</button>
       </div>
+      <div id="suggestions-dropdown" style="display:none"></div>
+
+      <div id="advanced-panel" style="display:none">
+        <div class="advanced-row">
+          <label>Year From</label>
+          <input id="year-from" type="number" placeholder="1900" min="0" max="2030" />
+        </div>
+        <div class="advanced-row">
+          <label>Year To</label>
+          <input id="year-to" type="number" placeholder="2025" min="0" max="2030" />
+        </div>
+        <div class="advanced-row">
+          <label>Format</label>
+          <select id="format-filter">
+            <option value="">Any</option>
+            <option value="epub">EPUB</option>
+            <option value="pdf">PDF</option>
+            <option value="mobi">MOBI</option>
+            <option value="cbr">CBR</option>
+            <option value="cbz">CBZ</option>
+          </select>
+        </div>
+        <div class="advanced-row">
+          <label>Sort By</label>
+          <select id="sort-select">
+            <option value="relevance">Relevance</option>
+            <option value="title-asc">Title A-Z</option>
+            <option value="title-desc">Title Z-A</option>
+            <option value="year-asc">Year ↑</option>
+            <option value="year-desc">Year ↓</option>
+            <option value="author">Author</option>
+          </select>
+        </div>
+      </div>
+
+      <div style="padding:0 16px 8px">
+        <button id="advanced-toggle" class="advanced-btn">
+          <i class="fa-solid fa-sliders"></i> Advanced
+        </button>
+      </div>
+
         <div id="results-area">
-          <div id="favorites-area" style="margin-bottom:16px;display:none">
-            <div style="font-size:11px;font-weight:600;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.05em">Favorites</div>
+          <div id="collections-area">
+            <div class="section-label">Collections</div>
+            <div id="collections-grid"></div>
+          </div>
+          <div id="trending-area" hidden>
+            <div class="section-label">Trending Searches</div>
+            <div id="trending-list" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+          </div>
+          <div id="favorites-area" hidden>
+            <div class="section-label">Favorites</div>
             <div id="favorites-list" style="display:flex;flex-direction:column;gap:4px"></div>
           </div>
-          <div id="recent-books" style="margin-bottom:16px;display:none">
-            <div style="font-size:11px;font-weight:600;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.05em">Recent</div>
+          <div id="recent-books" hidden>
+            <div class="section-label">Recent</div>
             <div id="recent-list" style="display:flex;flex-direction:column;gap:4px"></div>
           </div>
           <div id="placeholder">
             <i class="fa-solid fa-magnifying-glass icon-lg"></i>
             <p>Enter a query to search.</p>
+            <p style="font-size:11px;margin-top:8px;color:var(--text-muted)">Press <kbd>/</kbd> to focus search</p>
           </div>
           <div id="sources-status" style="margin-bottom:8px;display:flex;gap:8px;flex-wrap:wrap"></div>
           <div id="results-list"></div>
         </div>
        <div id="status"></div>
-       <div class="footer-attr">Made with ❤️ by <a href="https://github.com/protonexe" target="_blank" rel="noopener noreferrer">Proton</a></div>
+       <div class="footer-attr">
+         <span>Made with care by <a href="https://github.com/protonexe" target="_blank" rel="noopener noreferrer">Proton</a></span>
+         <span style="margin:0 4px">·</span>
+         <span id="footer-version"></span>
+       </div>
      </aside>
 
     <main class="panel-right">
@@ -73,6 +142,12 @@
           <i class="fa-solid fa-book icon-lg"></i>
           <p>No book open</p>
           <p class="text-sm mt-1">Click a search result or upload an <code>.epub</code>, <code>.pdf</code>, or <code>.txt</code> file.</p>
+          <div style="margin-top:16px;display:flex;flex-wrap:wrap;gap:8px;justify-content:center">
+            <span class="key-hint"><kbd>/</kbd> Search</span>
+            <span class="key-hint"><kbd>T</kbd> Theme</span>
+            <span class="key-hint"><kbd>Z</kbd> Zen Mode</span>
+            <span class="key-hint"><kbd>?</kbd> All Shortcuts</span>
+          </div>
         </div>
         <iframe id="reader-iframe" hidden referrerpolicy="no-referrer"></iframe>
         <div id="epub-viewport"></div>
@@ -84,51 +159,53 @@
         </div>
       </div>
       <div id="nav-bar" hidden>
-        <button id="nav-prev"><i class="fa-solid fa-chevron-left"></i> Prev</button>
+        <button id="nav-prev" aria-label="Previous page"><i class="fa-solid fa-chevron-left"></i> Prev</button>
         <span id="nav-location"><span id="nav-page">-</span> / <span id="nav-total">-</span></span>
-        <button id="nav-next">Next <i class="fa-solid fa-chevron-right"></i></button>
-        <button id="reader-toc" title="Table of Contents" style="background:none;border:none;cursor:pointer;color:var(--text);font-size:18px;padding:0 8px">
+        <button id="nav-next" aria-label="Next page">Next <i class="fa-solid fa-chevron-right"></i></button>
+        <button id="reader-toc" title="Table of Contents (/)" class="nav-icon-btn">
           <i class="fa-solid fa-list"></i>
         </button>
-        <button id="reader-tts" title="Read Aloud" style="background:none;border:none;cursor:pointer;color:var(--text);font-size:18px;padding:0 8px">
+        <button id="reader-tts" title="Read Aloud" class="nav-icon-btn">
           <i class="fa-solid fa-volume-high"></i>
         </button>
-        <button id="zen-mode" title="Zen Mode" style="background:none;border:none;cursor:pointer;color:var(--text);font-size:18px;padding:0 8px">
+        <button id="zen-mode" title="Zen Mode (Z)" class="nav-icon-btn">
           <i class="fa-solid fa-expand"></i>
         </button>
-        <button id="reader-settings" title="Reader Settings" style="background:none;border:none;cursor:pointer;color:var(--text);font-size:18px;padding:0 8px">
+        <button id="reader-settings" title="Reader Settings (S)" class="nav-icon-btn">
           <i class="fa-solid fa-gear"></i>
         </button>
       </div>
     </main>
-    <div id="settings-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:100;justify-content:center;align-items:center">
-      <div style="background:var(--bg);color:var(--text);padding:24px;border:1px solid var(--border);border-radius:4px;width:300px;box-shadow:0 10px 25px rgba(0,0,0,0.2)">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-          <h3 style="margin:0;font-size:16px;font-weight:600">Reader Settings</h3>
-          <button id="close-settings" style="background:none;border:none;cursor:pointer;color:var(--text);font-size:18px">
-            <i class="fa-solid fa-xmark"></i>
-          </button>
+
+    <div id="settings-overlay" class="modal-overlay" style="display:none">
+      <div class="modal-box">
+        <div class="modal-header">
+          <h3>Reader Settings</h3>
+          <button id="close-settings" class="modal-close" aria-label="Close settings"><i class="fa-solid fa-xmark"></i></button>
         </div>
-        <div style="display:flex;flex-direction:column;gap:16px">
-          <div style="display:flex;flex-direction:column;gap:8px">
-            <label style="font-size:12px;font-weight:600;color:var(--text-muted)">Font Size</label>
+        <div class="modal-body">
+          <div class="setting-group">
+            <label>Font Size</label>
             <div style="display:flex;align-items:center;gap:12px">
-              <button id="font-dec" style="padding:4px 8px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);cursor:pointer">-</button>
+              <button id="font-dec" class="setting-btn">-</button>
               <span id="font-size-val" style="font-size:14px">100%</span>
-              <button id="font-inc" style="padding:4px 8px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);cursor:pointer">+</button>
+              <button id="font-inc" class="setting-btn">+</button>
             </div>
           </div>
-          <div style="display:flex;flex-direction:column;gap:8px">
-            <label style="font-size:12px;font-weight:600;color:var(--text-muted)">Font Family</label>
-            <select id="font-family" style="padding:8px;background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);border-radius:4px;cursor:pointer">
+          <div class="setting-group">
+            <label>Font Family</label>
+            <select id="font-family" class="setting-select">
               <option value="serif">Serif</option>
               <option value="sans-serif">Sans-Serif</option>
               <option value="monospace">Monospace</option>
+              <option value="Georgia">Georgia</option>
+              <option value="Palatino">Palatino</option>
+              <option value="Courier New">Courier New</option>
             </select>
           </div>
-          <div style="display:flex;flex-direction:column;gap:8px">
-            <label style="font-size:12px;font-weight:600;color:var(--text-muted)">Line Spacing</label>
-            <select id="line-spacing" style="padding:8px;background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);border-radius:4px;cursor:pointer">
+          <div class="setting-group">
+            <label>Line Spacing</label>
+            <select id="line-spacing" class="setting-select">
               <option value="1.2">Compact</option>
               <option value="1.6" selected>Normal</option>
               <option value="2.0">Wide</option>
@@ -140,27 +217,78 @@
   </div>
 </div>
 
-<div id="toc-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:100;justify-content:center;align-items:center">
-  <div style="background:var(--bg);color:var(--text);padding:24px;border:1px solid var(--border);border-radius:4px;width:350px;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 10px 25px rgba(0,0,0,0.2)">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-shrink:0">
-      <h3 style="margin:0;font-size:16px;font-weight:600">Table of Contents</h3>
-      <button id="close-toc" style="background:none;border:none;cursor:pointer;color:var(--text);font-size:18px">
-        <i class="fa-solid fa-xmark"></i>
-      </button>
+<div id="toc-overlay" class="modal-overlay" style="display:none">
+  <div class="modal-box" style="max-height:80vh">
+    <div class="modal-header">
+      <h3>Table of Contents</h3>
+      <button id="close-toc" class="modal-close" aria-label="Close table of contents"><i class="fa-solid fa-xmark"></i></button>
     </div>
-    <div id="toc-list" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:8px"></div>
+    <div id="toc-list" class="modal-scroll-body"></div>
   </div>
 </div>
 
-<div id="toast"></div>
+<div id="book-detail-modal" class="modal-overlay" style="display:none">
+  <div class="modal-box" style="max-width:500px">
+    <div class="modal-header">
+      <h3>Book Details</h3>
+      <button id="close-book-detail" class="modal-close" aria-label="Close book details"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div id="book-detail-content" class="modal-body"></div>
+  </div>
+</div>
+
+<div id="keyboard-shortcuts-modal" class="modal-overlay" style="display:none">
+  <div class="modal-box" style="max-width:420px">
+    <div class="modal-header">
+      <h3><i class="fa-solid fa-keyboard"></i> Keyboard Shortcuts</h3>
+      <button id="close-shortcuts" class="modal-close" aria-label="Close shortcuts"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="modal-body" style="max-height:60vh;overflow-y:auto">
+      <div class="shortcut-section">
+        <div class="shortcut-section-title">Navigation</div>
+        <div class="shortcut-row"><kbd>/</kbd> or <kbd>K</kbd><span>Focus search</span></div>
+        <div class="shortcut-row"><kbd>Enter</kbd><span>Execute search</span></div>
+        <div class="shortcut-row"><kbd>Esc</kbd><span>Close modal / Exit zen mode</span></div>
+      </div>
+      <div class="shortcut-section">
+        <div class="shortcut-section-title">Reader</div>
+        <div class="shortcut-row"><kbd>←</kbd><span>Previous page</span></div>
+        <div class="shortcut-row"><kbd>→</kbd><span>Next page</span></div>
+        <div class="shortcut-row"><kbd>S</kbd><span>Reader settings</span></div>
+        <div class="shortcut-row"><kbd>Z</kbd><span>Toggle zen mode</span></div>
+      </div>
+      <div class="shortcut-section">
+        <div class="shortcut-section-title">General</div>
+        <div class="shortcut-row"><kbd>T</kbd><span>Toggle dark mode</span></div>
+        <div class="shortcut-row"><kbd>?</kbd><span>Show this help</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="health-modal" class="modal-overlay" style="display:none">
+  <div class="modal-box" style="max-width:420px">
+    <div class="modal-header">
+      <h3><i class="fa-solid fa-heart-pulse"></i> Source Health</h3>
+      <button id="close-health" class="modal-close" aria-label="Close health panel"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div id="health-content" class="modal-body"></div>
+  </div>
+</div>
+
+<div id="toast" role="alert" aria-live="polite"></div>
 
 <script src="/js/app.js"></script>
 <script>
   if ("serviceWorker" in navigator) {
-    window.addEventListener("load", () => {
-      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    window.addEventListener("load", function() {
+      navigator.serviceWorker.register("/sw.js").catch(function() {});
     });
   }
+  fetch("/api/version").then(function(r){return r.json()}).then(function(d){
+    var el = document.getElementById("footer-version");
+    if (el) el.textContent = "v" + d.version;
+  }).catch(function(){});
 </script>
 </body>
 </html>
