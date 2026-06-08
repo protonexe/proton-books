@@ -4,11 +4,14 @@ import fetch from "node-fetch";
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const LIBGEN_MIRRORS = [
-  "https://libgen.li"
-];
-
 const metadataCache = new Map();
+
+const LIBGEN_MIRRORS = [
+  "https://libgen.li",
+  "https://libgen.rs",
+  "https://libgen.is",
+  "https://libgen.st"
+];
 
 async function fetchWithMirrors(mirrors, path, options = {}) {
   for (const mirror of mirrors) {
@@ -99,7 +102,7 @@ const sourceHandlers = {
     const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=20&fields=key,title,author_name,cover_i,first_publish_year,ebook_access,has_fulltext,ia`;
     console.log(`[ol] Searching: ${url}`);
     try {
-      const resp = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      const resp = await fetch(url, { signal: AbortSignal.timeout(15000) });
       console.log(`[ol] Response status: ${resp.status}`);
       if (!resp.ok) {
         console.error(`[ol] HTTP error: ${resp.status} ${resp.statusText}`);
@@ -278,7 +281,13 @@ app.get("/api/search", async (req, res) => {
   try {
     const searchPromises = Object.entries(sourceHandlers).map(async ([id, handler]) => {
       try {
-        return await handler(query);
+        const result = await Promise.race([
+          handler(query),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error(`Source ${id} timed out`)), 20000)
+          )
+        ]);
+        return result;
       } catch (err) {
         console.error(`[search] ${id} failed:`, err.message);
         return [];
